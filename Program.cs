@@ -1,16 +1,24 @@
-﻿using BrideProblem.Services;
+﻿using BrideProblem.Entities;
+using BrideProblem.Services;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using DbContext = System.Data.Entity.DbContext;
 
 namespace BrideProblem; 
 
 internal static class Program {
-    // Local db settings
-    private const string ConnectionString = "Server=localhost;Port=5432;UserId=postgres;" +
-                                            "Password=bride;Database=postgres;";
-    private static readonly NpgsqlConnection Con = new(ConnectionString);
+    private class EnvironmentContext : Microsoft.EntityFrameworkCore.DbContext {
+        private const string ConnectionString = "Server=localhost;Port=5432;UserId=postgres;" +
+                                                "Password=bride;Database=postgres;";
+        public Microsoft.EntityFrameworkCore.DbSet<Case> Cases { get; set; }
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) {
+            optionsBuilder.UseNpgsql(ConnectionString);
+        }
+    }
+    
     private static readonly Random Rand = new();
     private static IHost? _host;
 
@@ -27,30 +35,25 @@ internal static class Program {
             
         var num = CheckMode(input);
 
-        Con.Open();
-        
+        using var context = new EnvironmentContext();
+        context.Database.EnsureCreated();
         if (num != 0) {
-            SingleRun(args, num);
+            SingleRun(args, num, context);
         } else {
-            MultipleRun(args);
+            MultipleRun(args, context);
         }
-
-        Con.Close();
     }
 
-    private static void SingleRun(String[] args, int num) {
+    private static void SingleRun(String[] args, int num, EnvironmentContext context) {
         _host = CreateHostBuilder(args).Build();
         var hall = _host.Services.GetService(typeof(Hall));
         if (hall == null) return;
         
-        var sql = $"SELECT seed FROM cases WHERE number = {num}";
-        var com = new NpgsqlCommand(sql, Con);
-        var result = com.ExecuteScalar();
+        var result = context.Cases
+            .First(c => c.Number.Equals(num))
+            .Seed;
 
-        var seed = 0;
-        if (result != null) {
-            seed = int.Parse(result.ToString() ?? string.Empty);
-        }
+        var seed = int.Parse(result.ToString());
 
         if (seed != 0) {
             ((Hall)hall).SetSeed(seed);
@@ -64,7 +67,7 @@ internal static class Program {
         return num is < 1 or > 100 ? 0 : num;
     }
 
-    private static void MultipleRun(String[] args) {
+    private static void MultipleRun(String[] args, EnvironmentContext context) {
         var sum = 0;
         
         for (var i = 1; i <= 100; ++i) {
@@ -73,12 +76,12 @@ internal static class Program {
             if (hallObj == null) break;
             var hall = (Hall)hallObj;
             
-            // Get case seed from db
-            var sql = $"SELECT seed FROM cases WHERE number = {i};";
-            var com = new NpgsqlCommand(sql, Con);
-            var result = com.ExecuteScalar();
+
+            var result = context.Cases
+                .First(c => c.Number.Equals(i))
+                .Seed;
                 
-            var seed = int.Parse(result?.ToString() ?? string.Empty);
+            var seed = int.Parse(result.ToString());
             hall.SetSeed(seed);
 
             _host.Start();
@@ -88,11 +91,12 @@ internal static class Program {
             sum += JudgeScore(score);
             Console.WriteLine($"Total: {sum}");
 
-            // Write case result in db
-            sql = $"UPDATE cases SET result = {score} WHERE number = {i};";
-            com = new NpgsqlCommand(sql, Con);
-            com.ExecuteNonQuery();
+            context.Cases
+                .First(c => c.Number.Equals(i))
+                .Result = score;
         }
+
+        context.SaveChanges();
         
         Console.WriteLine($"Average chosen candidate score: {(double)sum / 100}.");
     }
@@ -109,20 +113,17 @@ internal static class Program {
 
     private static void GenerateCases(int seed) {
         var rnd = new Random(seed);
-        // Clears the table with cases
-        var sql = "TRUNCATE cases;";
 
-        Con.Open();
-        var com = new NpgsqlCommand(sql, Con);
-        com.ExecuteNonQuery();
+        using (var context = new EnvironmentContext()) {
+            context.Cases.RemoveRange(context.Cases);
+            context.SaveChanges();
 
-        for (var i = 1; i <= 100; ++i) {
-            sql = "insert into cases (id, number, seed)" +
-                  $" values (DEFAULT, {i.ToString()}, {rnd.Next()});";
-            com.CommandText = sql;
-            com.ExecuteNonQuery();
+            for (var i = 1; i <= 100; ++i) {
+                context.Cases.Add(new Case { Number = i, Seed = rnd.Next()});
+            }
+
+            context.SaveChanges();
         }
-        Con.Close();
     }
 
     private static IHostBuilder CreateHostBuilder(string[] args) {

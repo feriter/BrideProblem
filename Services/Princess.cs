@@ -66,7 +66,7 @@ namespace BrideProblem.Services {
             if (chosen != null) {
                 Result = chosen.Score;
             }
-            Console.Write($"{(chosen == null ? "Nobody was chosen" : chosen.Name)}, ");
+            Console.Write($"{(chosen == null ? "Nobody was chosen" : chosen.Name)} ");
         }
 
         public Task StartAsync(CancellationToken cancellationToken) {
