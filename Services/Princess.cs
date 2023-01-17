@@ -8,9 +8,15 @@ namespace BrideProblem.Services {
         private Friend _friend;
         private readonly Candidate?[] _rejectedCandidates;
         private int _rejectedCount;
-        private readonly IHostApplicationLifetime _appLifetime;
+        private readonly IHostApplicationLifetime? _appLifetime;
         public static int Result { get; private set; }
 
+        public Princess(Hall hall, Friend friend) {
+            _hall = hall;
+            _friend = friend;
+            _rejectedCandidates = new Candidate?[100];
+        }
+        
         public Princess(IHostApplicationLifetime appLifetime, Hall hall, Friend friend) {
             _appLifetime = appLifetime;
             _hall = hall;
@@ -19,12 +25,12 @@ namespace BrideProblem.Services {
         }
 
         // Returns chosen candidate. Null if none is chosen.
-        private Candidate? HighestChanceOfChoosingTheBest2() {
+        public Candidate? HighestChanceOfChoosingTheBest2() {
             _rejectedCount = 0;
             Candidate? candidate;
 
             const int candidatesToReject = 15;
-            // Skip first 37 candidates
+            // Skip first N candidates
             for (var i = 0; i < candidatesToReject; ++i) {
                 candidate = _hall.Next();
                 Reject(candidate);
@@ -69,7 +75,7 @@ namespace BrideProblem.Services {
             } catch (Exception e) {
                 Console.Out.WriteLineAsync($"Unhandled exception: \n{e.Message}");
             }
-            _appLifetime.StopApplication();
+            _appLifetime?.StopApplication();
             return Task.CompletedTask;
         }
 
