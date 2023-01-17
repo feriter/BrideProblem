@@ -38,9 +38,19 @@ public class PrincessTests {
     }
 
     [Test]
-    public void StrategyTest() {
+    public void StrategyTest1() {
         var chosen = _princess.HighestChanceOfChoosingTheBest2();
         // After 15 skips the 16s is the best
         Assert.That(chosen?.Score == 16);
+    }
+
+    [Test]
+    public void StrategyTest2() {
+        for (var i = 0; i < 100; ++i) {
+            _candies[i] = new Candidate(100 - i, (100 - i).ToString());
+        }
+        _hall.SetCandidates(_candies);
+        var chosen = _princess.HighestChanceOfChoosingTheBest2();
+        Assert.That(chosen is null);
     }
 }
